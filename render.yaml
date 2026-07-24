@@ -3,7 +3,7 @@ services:
     name: ai-calorie-backend
     env: python
     region: singapore
-    buildCommand: cd backend && pip install -r requirements.txt
+    buildCommand: cd webapp && npm install && npm run build && cd ../backend && pip install -r requirements.txt
     startCommand: cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: PYTHON_VERSION

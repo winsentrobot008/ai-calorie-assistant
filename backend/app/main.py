@@ -4,10 +4,12 @@ AI Calorie Assistant — FastAPI entry point.
 import os
 import json
 import logging
+from pathlib import Path
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import HTMLResponse, RedirectResponse
 from dotenv import load_dotenv
 
 load_dotenv(override=True)
@@ -87,3 +89,35 @@ async def health():
 async def healthz():
     """Kubernetes-style health check endpoint."""
     return {"status": "ok"}
+
+
+# ── Root — serve frontend SPA or redirect to docs ──
+FRONTEND_DIST = Path(__file__).resolve().parent.parent.parent / "webapp" / "dist"
+
+if FRONTEND_DIST.is_dir():
+    logger.info(f"Mounting frontend static files from {FRONTEND_DIST}")
+    app.mount("/assets", StaticFiles(directory=str(FRONTEND_DIST / "assets")), name="frontend_assets")
+
+    @app.get("/")
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str = ""):
+        """Serve the React SPA for all frontend routes."""
+        # Skip API routes — let them fall through to the router
+        if full_path.startswith("api/") or full_path.startswith("storage/") or full_path.startswith("health"):
+            from fastapi.responses import JSONResponse
+            return JSONResponse({"detail": "Not Found"}, status_code=404)
+        index_path = FRONTEND_DIST / "index.html"
+        if index_path.exists():
+            return HTMLResponse(index_path.read_text(encoding="utf-8"))
+        return {"detail": "Frontend not built yet"}, 501
+else:
+    @app.get("/")
+    async def root_info():
+        """Root endpoint when frontend is not built."""
+        return {
+            "project": "AI Calorie Assistant",
+            "version": "0.1.0",
+            "docs": "/docs",
+            "api": "/api/v1",
+            "status": "backend running (frontend not built)",
+        }
