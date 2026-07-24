@@ -1,18 +1,21 @@
 """
-Admin API — dashboard overview, user management, revenue, model monitoring, config.
+Admin API — dashboard overview, user management, revenue, model monitoring, config, RBAC, TTS.
 """
 import uuid
 import hashlib
 from datetime import datetime, date, timedelta
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Body
+from fastapi.responses import Response
 from sqlalchemy import select, func, text
 from sqlalchemy.ext.asyncio import AsyncSession
+from typing import Optional
 
 from app.db import get_db
 from app.models.user import User
 from app.models.billing import Invoice, AdLog
-from app.models.admin import AdminUser, SystemConfig, AuditLog, ModelMonitor
+from app.models.admin import AdminUser, SystemConfig, AuditLog, ModelMonitor, Role, Permission, UserRole, RolePermission
 from app.models.meal import Meal
+from app.services.tts import synthesize, list_available_voices, DEFAULT_VOICE, DEFAULT_RATE, DEFAULT_PITCH
 
 router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
 
@@ -453,6 +456,167 @@ async def get_audit_logs(
             for log in logs
         ],
     }
+
+
+# ── RBAC Permission Check Utility ──
+
+def _check_permission(admin: AdminUser, required: str) -> bool:
+    """Check if an admin user has a specific permission via their roles."""
+    if not admin:
+        return False
+    # super_admin bypasses all permission checks
+    if admin.role == "super_admin":
+        return True
+    # Check via RBAC roles (if loaded)
+    if hasattr(admin, 'roles') and admin.roles:
+        for role in admin.roles:
+            if role.name == "super_admin":
+                return True
+            for rp in role.role_permissions if hasattr(role, 'role_permissions') else []:
+                if rp.permission_code == required:
+                    return True
+    # Legacy role-based fallback
+    if admin.role == "admin" and required in ("system:monitor", "system:logs", "user:read", "billing:read"):
+        return True
+    return False
+
+
+def _require_permission(required: str):
+    """Dependency factory — verifies the admin has the required permission."""
+    async def checker(
+        admin_id: str = Query(...),
+        db: AsyncSession = Depends(get_db),
+    ):
+        result = await db.execute(select(AdminUser).where(AdminUser.id == admin_id))
+        admin = result.scalar_one_or_none()
+        if not admin or not admin.is_active:
+            raise HTTPException(401, "Unauthorized")
+        if not _check_permission(admin, required):
+            raise HTTPException(403, f"Forbidden — requires {required}")
+        return admin
+    return checker
+
+
+# ── RBAC Management Endpoints ──
+
+
+@router.get("/roles")
+async def list_roles(
+    admin: AdminUser = Depends(_require_permission("admin:manage")),
+    db: AsyncSession = Depends(get_db),
+):
+    """List all roles with their permissions."""
+    result = await db.execute(select(Role).order_by(Role.name))
+    roles = result.scalars().all()
+    roles_data = []
+    for role in roles:
+        rp_result = await db.execute(
+            select(RolePermission).where(RolePermission.role_id == role.id)
+        )
+        perms = [rp.permission_code for rp in rp_result.scalars().all()]
+        roles_data.append({
+            "id": role.id,
+            "name": role.name,
+            "description": role.description,
+            "is_system": role.is_system,
+            "permissions": perms,
+        })
+    return {"status": "ok", "roles": roles_data}
+
+
+@router.get("/permissions")
+async def list_permissions(
+    admin: AdminUser = Depends(_require_permission("admin:manage")),
+    db: AsyncSession = Depends(get_db),
+):
+    """List all available permissions."""
+    result = await db.execute(select(Permission).order_by(Permission.group, Permission.code))
+    perms = result.scalars().all()
+    return {
+        "status": "ok",
+        "permissions": [
+            {
+                "code": p.code,
+                "name": p.name,
+                "group": p.group,
+                "description": p.description,
+            }
+            for p in perms
+        ],
+    }
+
+
+@router.post("/roles/assign")
+async def assign_role(
+    admin_id: str = Query(...),
+    target_admin_id: str = Query(...),
+    role_id: str = Query(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """Assign a role to an admin user."""
+    # Verify requesting admin has permission
+    result = await db.execute(select(AdminUser).where(AdminUser.id == admin_id))
+    requester = result.scalar_one_or_none()
+    if not requester or requester.role != "super_admin":
+        # Check RBAC
+        if not _check_permission(requester, "admin:manage"):
+            raise HTTPException(403, "Forbidden — requires admin:manage")
+
+    # Check role exists
+    role_result = await db.execute(select(Role).where(Role.id == role_id))
+    if not role_result.scalar_one_or_none():
+        raise HTTPException(404, "Role not found")
+
+    # Check target admin
+    target_result = await db.execute(select(AdminUser).where(AdminUser.id == target_admin_id))
+    target = target_result.scalar_one_or_none()
+    if not target:
+        raise HTTPException(404, "Admin user not found")
+
+    # Remove existing roles and assign new one
+    await db.execute(UserRole.__table__.delete().where(UserRole.admin_id == target_admin_id))
+    ur = UserRole(id=_new_id(), admin_id=target_admin_id, role_id=role_id)
+    db.add(ur)
+    await db.commit()
+
+    return {"status": "ok", "message": f"Role assigned to {target.username}"}
+
+
+# ── TTS (Edge-TTS) Endpoints ──
+
+
+@router.get("/tts/voices")
+async def get_tts_voices():
+    """List available Edge-TTS voices."""
+    voices = await list_available_voices()
+    return {
+        "status": "ok",
+        "voices": [{"id": k, "name": v} for k, v in voices.items()],
+    }
+
+
+@router.post("/tts/synthesize")
+async def tts_synthesize(
+    text: str = Body(..., embed=True),
+    voice: str = Body(DEFAULT_VOICE, embed=True),
+    rate: str = Body(DEFAULT_RATE, embed=True),
+    pitch: str = Body(DEFAULT_PITCH, embed=True),
+):
+    """Synthesize text to speech using Edge-TTS."""
+    if not text or len(text.strip()) == 0:
+        raise HTTPException(400, "Text is required")
+    if len(text) > 500:
+        raise HTTPException(400, "Text too long (max 500 characters)")
+
+    audio_bytes = await synthesize(text, voice, rate, pitch)
+    if audio_bytes is None:
+        raise HTTPException(502, "TTS synthesis failed")
+
+    return Response(
+        content=audio_bytes,
+        media_type="audio/mpeg",
+        headers={"Content-Disposition": "inline; filename=tts_output.mp3"},
+    )
 
 
 # ── Initialize default admin ──

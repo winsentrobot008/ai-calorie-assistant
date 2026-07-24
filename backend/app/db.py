@@ -39,6 +39,10 @@ async def init_db():
         from app.models.meal import Meal
         from app.models.trend import TrendCache, Suggestion
         from app.models.billing import Invoice, AdLog
-        from app.models.admin import AdminUser, SystemConfig, AuditLog, ModelMonitor
+        from app.models.admin import AdminUser, SystemConfig, AuditLog, ModelMonitor, Role, Permission, UserRole, RolePermission
         await conn.run_sync(Base.metadata.create_all)
     logger.info("Database tables created")
+
+    # Seed default RBAC data
+    from app.models.admin import _seed_rbac
+    await _seed_rbac()

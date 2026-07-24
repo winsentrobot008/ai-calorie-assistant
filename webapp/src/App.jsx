@@ -11,7 +11,7 @@ import LoginModal from './components/LoginModal'
 import Login from './pages/Login'
 import AdBanner from './components/AdBanner'
 import AdminLogin from './components/AdminLogin'
-import AdminDashboard from './components/AdminDashboard'
+import AdminConsole from './components/AdminConsole'
 import './App.css'
 
 const API = import.meta.env.VITE_API_URL || "/api"
@@ -135,9 +135,9 @@ export default function App() {
     setAdminSession(null)
   }
 
-  // If admin is logged in, show admin dashboard
+  // If admin is logged in, show admin console
   if (adminSession && !adminSession.pending) {
-    return <AdminDashboard session={adminSession} onLogout={handleAdminLogout} />
+    return <AdminConsole session={adminSession} onLogout={handleAdminLogout} />
   }
 
   return (
