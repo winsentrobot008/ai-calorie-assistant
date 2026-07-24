@@ -1,16 +1,27 @@
 {
-  "buildCommand": "cd webapp && npm install && npm run build",
-  "outputDirectory": "webapp/dist",
-  "installCommand": "cd webapp && npm install",
-  "devCommand": "cd webapp && npm run dev",
-  "functions": {
-    "api/**/*.py": {
-      "runtime": "vercel-python@3.12"
+  "version": 2,
+  "builds": [
+    {
+      "src": "api/index.py",
+      "use": "@vercel/python"
+    },
+    {
+      "src": "webapp/package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "webapp/dist"
+      }
     }
-  },
-  "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/$1" },
-    { "source": "/((?!api/).*)", "destination": "/index.html" }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "api/index.py"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "webapp/$1"
+    }
   ],
   "git": {
     "deploymentEnabled": {
