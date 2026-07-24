@@ -1,0 +1,20 @@
+{
+  "buildCommand": "cd webapp && npm install && npm run build",
+  "outputDirectory": "webapp/dist",
+  "installCommand": "cd webapp && npm install",
+  "devCommand": "cd webapp && npm run dev",
+  "functions": {
+    "api/**/*.py": {
+      "runtime": "vercel-python@3.12"
+    }
+  },
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/$1" },
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
+  ],
+  "git": {
+    "deploymentEnabled": {
+      "deploy/ai-calorie-20260724": true
+    }
+  }
+}
