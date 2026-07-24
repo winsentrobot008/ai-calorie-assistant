@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: ai-calorie-backend
+    env: python
+    region: singapore
+    buildCommand: cd backend && pip install -r requirements.txt
+    startCommand: cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.0
+      - key: AI_API_BASE_URL
+        value: https://api.lk888.ai/api
+      - key: AI_API_KEY
+        sync: false
+    disk:
+      name: calorie-storage
+      mountPath: /app/storage
+      sizeGB: 1
