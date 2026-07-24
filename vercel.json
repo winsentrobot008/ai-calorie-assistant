@@ -1,31 +1,8 @@
 {
-  "version": 2,
-  "builds": [
+  "rewrites": [
     {
-      "src": "api/index.py",
-      "use": "@vercel/python"
-    },
-    {
-      "src": "webapp/package.json",
-      "use": "@vercel/static-build",
-      "config": {
-        "distDir": "webapp/dist"
-      }
+      "source": "/api/:path*",
+      "destination": "/api/index.py"
     }
-  ],
-  "routes": [
-    {
-      "src": "/api/(.*)",
-      "dest": "api/index.py"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "webapp/$1"
-    }
-  ],
-  "git": {
-    "deploymentEnabled": {
-      "deploy/ai-calorie-20260724": true
-    }
-  }
+  ]
 }
