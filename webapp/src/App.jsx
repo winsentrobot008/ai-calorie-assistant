@@ -9,12 +9,12 @@ import LandingPage from './pages/LandingPage'
 import BillingModal from './components/BillingModal'
 import LoginModal from './components/LoginModal'
 import Login from './pages/Login'
-// import AdBanner from './components/AdBanner'
+import AdBanner from './components/AdBanner'
 import AdminLogin from './components/AdminLogin'
 import AdminDashboard from './components/AdminDashboard'
 import './App.css'
 
-const API = import.meta.env.VITE_API_URL || "http://localhost:8000"
+const API = import.meta.env.VITE_API_URL || "/api"
 const USER_ID = localStorage.getItem('user_id') || 'anonymous'
 
 export default function App() {
@@ -53,8 +53,24 @@ export default function App() {
     } catch {}
   }, [])
 
-  // 广告积分已临时禁用 (2026-07-24)
-  // const handleWatchAd = useCallback(async () => { ... })
+  // Watch rewarded ad → get +1 recognition
+  const handleWatchAd = useCallback(async () => {
+    setAdLoading(true)
+    try {
+      const r = await fetch(`${API}/api/v1/billing/ad-reward?user_id=${USER_ID}`, { method: 'POST' })
+      if (r.ok) {
+        const d = await r.json()
+        addLog(`[AD] ${d.message}`)
+        refreshBilling()
+      } else {
+        const err = await r.text()
+        addLog(`[WARN] ${err.slice(0, 80)}`)
+      }
+    } catch (e) {
+      addLog(`[WARN] ${e.message}`)
+    }
+    setAdLoading(false)
+  }, [API, USER_ID, addLog, refreshBilling])
 
   // Fetch daily stats + suggestions
   const refreshStats = useCallback(async () => {
@@ -192,8 +208,7 @@ export default function App() {
             ) : tab === 'record' ? (
               <>
                 <MealRecorder api={API} onSaved={handleMealSaved} addLog={addLog} />
-                {/* AdBanner 已临时禁用 (2026-07-24) */}
-                {/* !isPremium && <AdBanner api={API} userId={USER_ID} adType="banner" addLog={addLog} /> */}
+                {!isPremium && <AdBanner api={API} userId={USER_ID} adType="banner" addLog={addLog} />}
               </>
             ) : tab === 'dashboard' ? (
               <DailyDashboard

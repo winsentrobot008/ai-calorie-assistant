@@ -29,3 +29,6 @@ storage/
 # OS
 .DS_Store
 Thumbs.db
+
+# Logs
+trae_logs_*/

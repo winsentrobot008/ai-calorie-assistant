@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 
-const ADMIN_API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const ADMIN_API = import.meta.env.VITE_API_URL || '/api'
 
 function StatCard({ label, value, sub, color }) {
   return (

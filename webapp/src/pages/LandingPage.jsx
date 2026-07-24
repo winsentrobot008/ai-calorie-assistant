@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import BillingModal from '../components/BillingModal'
 
-const API = import.meta.env.VITE_API_URL || "http://localhost:8001"
+const API = import.meta.env.VITE_API_URL || "/api"
 
 const COMPARISON_ROWS = [
   { key: 'AI 食物拍照识别', freeKey: 'daily_1', proKey: 'unlimited' },

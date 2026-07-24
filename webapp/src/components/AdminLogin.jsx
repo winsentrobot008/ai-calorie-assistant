@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 
-const ADMIN_API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const ADMIN_API = import.meta.env.VITE_API_URL || '/api'
 
 export default function AdminLogin({ onLogin }) {
   const [username, setUsername] = useState('')
